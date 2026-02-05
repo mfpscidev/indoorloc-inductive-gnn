@@ -1,1 +1,1 @@
-# inductive-indoorloc
+# Inductive learning for indoor positioning systems

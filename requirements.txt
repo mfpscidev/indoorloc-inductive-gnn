@@ -1,0 +1,17 @@
+tqdm==4.67.1
+psutil==7.0.0
+py-cpuinfo==9.0.0
+numpy==2.3.2
+matplotlib==3.10.3
+pandas==2.3.1
+seaborn==0.13.2
+plotly==6.5
+scikit-learn==1.7.1
+networkx==3.5
+optuna==4.7.0
+torch==2.7.1
+torch-geometric==2.6.1
+torchvision==0.22.1
+torchinfo==1.8.0
+torchviz==0.0.3
+torch-cluster -f https://data.pyg.org/whl/torch-2.7.1+cu126.html
