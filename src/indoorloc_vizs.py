@@ -119,7 +119,7 @@ class GraphVisualizer:
     def __init__(self):
         pass
 
-    def _assign_node_colors(self, graphdata):
+    def _assign_node_colors_by_class(self, graphdata):
         """
         Assigna un color als nodes de cada classe.
         """
@@ -134,6 +134,34 @@ class GraphVisualizer:
             node_colors.append(colors[index])
         
         return node_colors, colors, class_to_index
+
+    def _assign_node_colors_by_split(self, graphdata):
+        split_colors = {
+            "train": "tab:blue",
+            "val": "tab:orange",
+            "test": "tab:green"
+        }
+
+        split_to_index = {split: idx for idx, split in enumerate(split_colors)}
+
+        train_nodes = graphdata.train_mask.nonzero(as_tuple=True)[0].tolist()
+        val_nodes = graphdata.val_mask.nonzero(as_tuple=True)[0].tolist()
+        test_nodes = graphdata.test_mask.nonzero(as_tuple=True)[0].tolist()
+
+        node_colors = []
+        for idx in range(graphdata.num_nodes):
+            if idx in train_nodes:
+                node_colors.append(split_colors["train"])
+            elif idx in val_nodes:
+                node_colors.append(split_colors["val"])
+            elif idx in test_nodes:
+                node_colors.append(split_colors["test"])
+            else:
+                node_colors.append("lightgray")
+
+        return node_colors, split_colors, split_to_index
+
+
 
     def _add_edge_weights_to_nx(self, G, graphdata):
         """
@@ -212,24 +240,31 @@ class GraphVisualizer:
 
         return pos
 
-    def draw_graph(self, graphdata, k=0.2, iterations=200, spacing=3.0, mode="grid", ax=None, title=None,out_path=None):
-        node_colors, colors, class_to_index = self._assign_node_colors(graphdata)
+    def draw_graph(self, graphdata, k=0.2, iterations=200, spacing=3.0, scheme="inductive",
+                    color="green", color_mode="split", mode="grid", ax=None, title=None, out_path=None):
         """
         Dibuixa el graf G amb Networkx.
         """
+        if scheme == "transductive": 
+            if color_mode == "class":
+                node_colors, colors, class_to_index = self._assign_node_colors_by_class(graphdata)
+            elif color_mode == "split":
+                node_colors, colors, class_to_index = self._assign_node_colors_by_split(graphdata)
+            
+
         if ax is None:
-            fig, ax = plt.subplots(figsize=(7, 7))
+            fig, ax = plt.subplots(figsize=(5, 5))
 
         G = to_networkx(graphdata, to_undirected=True)
         G = self._add_edge_weights_to_nx(G, graphdata)
-        pos = self.compact_cluster_layout_from_pyg(graphdata, k, iterations, spacing, mode)
+        #pos = self.compact_cluster_layout_from_pyg(graphdata, k, iterations, spacing, mode)
         pos = nx.spring_layout(G)    
 
         nx.draw(
             G, pos, ax=ax,
             with_labels=False,
             node_size=40,
-            node_color=node_colors,
+            node_color=node_colors if scheme == "transductive" else color,
             width=0.05,
             edgecolors='black',
             edge_color="#474545BA",       
@@ -237,21 +272,23 @@ class GraphVisualizer:
             alpha=0.8
         )
 
-        patches = []
-        for cls, idx in class_to_index.items():
-            patch = mpatches.Patch(color=colors[idx], label=f"{cls}")
-            patches.append(patch)
+        if scheme == "transductive": 
+            patches = []
+            for split, idx in class_to_index.items():
+                color = colors[split]  
+                patch = mpatches.Patch(color=color, label=f"{split}")
+                patches.append(patch)
 
-        ax.legend(
-            handles=patches,
-            title="Planta",
-            title_fontsize=12,
-            loc="upper right",
-            fontsize=12,
-            bbox_to_anchor=(1.1, 0.85)
-        )
+            ax.legend(
+                handles=patches,
+                title="Floor" if color_mode=="class" else "Split",
+                title_fontsize=12,
+                loc="upper right",
+                fontsize=12,
+                bbox_to_anchor=(1.1, 0.85)
+            )
         plt.title(title, fontsize=16)
-        plt.savefig(out_path, format="pdf", bbox_inches="tight")
+        #plt.savefig(out_path, format="pdf", bbox_inches="tight")
 
 
 class TableVisualizer:
@@ -291,7 +328,6 @@ class TableVisualizer:
         styler.set_table_styles([caption, headers, cells])
         return styler
     
-
 
 def plot_2d_sample_distribution(dataset, title, out_path):
     """
