@@ -1,6 +1,6 @@
 import copy
 from typing import Union
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
@@ -33,58 +33,23 @@ DATASETS_SODINDOORLOC = ilenums.Datasets.sodindoorloc.value
 
 @dataclass
 class Train:
+    """Container for training features and labels."""
+
     x: pd.DataFrame
     y: pd.DataFrame
 
 
 @dataclass
 class Test:
+    """Container for test features and labels."""
+
     x: pd.DataFrame
     y: pd.DataFrame
 
 
-@dataclass
-class Classification:
-    dataset_name: str
-    floorid: dict = field(default_factory=dict, init=False)
-    buildingid: dict = field(default_factory=dict)
-    building_floor: dict = field(default_factory=dict)
-    
-    def __post_init__(self):
-        self.floorid = self.floorid or {}
-        self.buildingid = self.buildingid or {}
-        self.building_floor = self.building_floor or {}
-
-        if self.dataset_name == DATASETS_SODINDOORLOC:
-            del self.buildingid
-            del self.building_floor 
-                    
-
-@dataclass
-class Regression:
-    dataset_name: str
-    allbuildings: dict = None
-    building: dict = None
-
-    def __post_init__(self):
-        self.building = self.building or {}
-        if self.dataset_name == DATASETS_UJIINDOORLOC:
-            self.allbuildings = self.allbuildings or {}
-
-
-class IndoorLocResults:
-    """
-    Agrupa els resultats de classificació i regressió.
-    """
-    def __init__(self, dataset_name):
-        self.cls = Classification(dataset_name)
-        self.reg = Regression(dataset_name)
-
-
 class IndoorLocGraphDataLoader:
-    """
-    Agrupa objectes Data dels grafs per classificació i regressió.
-    """
+    """Holds graph data loaders for classification and regression."""
+
     cls: dict = None
     reg: dict = None
     def __post_init__(self):
@@ -93,9 +58,8 @@ class IndoorLocGraphDataLoader:
 
 
 class IndoorLocDataset:
-    """
-    Gestiona la carrega de dades.
-    """
+    """Loads training and testing datasets from CSV files."""
+
     def __init__(self, dataset_structure, path, header):
         self.target = None
         
@@ -115,15 +79,9 @@ class IndoorLocDataset:
         self.buildings = self._get_buildings(self.train)
 
     def _load_data(self, path, header):
-        """
-        Carrega els fitxers de dades.
-        """
         return pd.read_csv(filepath_or_buffer=path, header=header)
     
     def _add_headers(self, dataset, dataset_structure):
-        """
-        Assigna nom a les columnes del Datafrane
-        """
         if dataset_structure == DATASETS_UJIINDOORLOC:
             dataset.y.drop(2, axis=1, inplace=True)
         if dataset_structure == DATASETS_SODINDOORLOC:
@@ -135,16 +93,12 @@ class IndoorLocDataset:
         return dataset
     
     def _get_buildings(self, dataset):
-        """
-        Retorna identificador dels edificis d'un conjunt de dades.
-        """
         return sorted(dataset.y[TARGETS_BUILDING].unique().tolist())
 
 
 class IndoorLocPreprocessor:
-    """
-    Gestiona el preprocessament de les dades.
-    """
+    """Preprocesses datasets for training and testing."""
+
     def preprocess_dataset(
         self, 
         data: IndoorLocDataset,  
@@ -160,8 +114,8 @@ class IndoorLocPreprocessor:
             data.test.x = self._replace_missing_signals(data.test.x)
         
         if codification:
-            data.train.y = self._create_target(data.train.y)
-            data.test.y = self._create_target(data.test.y)
+            data.train.y = self._encode_building_floor(data.train.y)
+            data.test.y = self._encode_building_floor(data.test.y)
 
         if drop_unused_columns:
             data.train.y.drop(columns=["FLOORID", "BUILDINGID"], axis=1, inplace=True)
@@ -182,9 +136,8 @@ class IndoorLocPreprocessor:
         return data
 
     def filter_building(self, data, target, building_id):
-        """
-        Filtra les dades corresponents a un edifici del Dataframe.
-        """
+        """Filters dataset to include only samples from a specific building."""
+
         building_data = copy.deepcopy(data)
 
         train_x = building_data.train.x
@@ -203,9 +156,8 @@ class IndoorLocPreprocessor:
         return building_data
 
     def _apply_pca(self, data, n_components=0.95):
-        """
-        Aplica reducció de dimensionalitat amb la tècnica PCA.
-        """
+        """Reduces feature dimensionality using Principal Component Analysis (PCA)."""
+
         pca = PCA(n_components=n_components)
 
         data.train.x = pd.DataFrame(
@@ -224,17 +176,15 @@ class IndoorLocPreprocessor:
         return data
 
     def _replace_missing_signals(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Reemplaça el valor dels senyals dèbils o absents.
-        """
+        """Replaces missing or weak signal values (-100) with -105."""
+
         return df.where(df != 100, -105)
 
     def _normalize_zero_to_one(
             self, train_x: pd.DataFrame, test_x: pd.DataFrame
     ) -> tuple[pd.DataFrame, pd.DataFrame]:
-        """
-        Aplica normalització amb tranformació lineal.
-        """
+        """Normalizes features to the range [0, 1] using MinMax scaling."""
+
         scaler = MinMaxScaler()
         train_scaled = scaler.fit_transform(train_x)
         test_scaled = scaler.transform(test_x)
@@ -247,9 +197,8 @@ class IndoorLocPreprocessor:
     def _normalize_exponential(
             self, train_x: pd.DataFrame, test_x: pd.DataFrame, alpha: float = np.e
     ) -> tuple[pd.DataFrame, pd.DataFrame]:
-        """
-        Aplica normalització amb tranformació exponencial.
-        """
+        """Applies exponential normalization to the features."""
+
         train_min = train_x.min().min()
         train_max = train_x.max().max()
         
@@ -267,9 +216,8 @@ class IndoorLocPreprocessor:
     def _normalize_power(
             self, train_x: pd.DataFrame, test_x: pd.DataFrame, alpha: float = np.e
     ) -> tuple[pd.DataFrame, pd.DataFrame]:
-        """
-        Aplica normalització amb tranformació de potència.
-        """
+        """Applies power-law normalization to the features."""
+
         train_min = train_x.min().min()
         train_max = train_x.max().max()
         
@@ -284,19 +232,17 @@ class IndoorLocPreprocessor:
         
         return train_df, test_df
 
-    def _create_target(self, y: pd.DataFrame) -> pd.DataFrame:
-        """
-        Codifica variable building_floor
-        """
+    def _encode_building_floor(self, y: pd.DataFrame) -> pd.DataFrame:
+        """Encodes the combination of building and floor as categorical codes."""       
+
         building_floor_pairs = list(zip(y[TARGETS_BUILDING], y[TARGETS_FLOOR]))
         y[TARGETS_BUILDING_FLOOR] = pd.Categorical(building_floor_pairs).codes
         return y    
     
 
 class IndoorLocGraphData:
-    """
-    Gestiona la construcció dels grafs.
-    """
+    """Constructs graph data from IndoorLoc datasets for PyTorch Geometric models."""
+    
     def __init__(self):
         self.y_scaler = MinMaxScaler()
         self.device = torch.device(
@@ -307,9 +253,8 @@ class IndoorLocGraphData:
         self, 
         data: IndoorLocDataset
     ) -> IndoorLocDataset:
-        """
-        Assigna identificador únic a tots els nodes.
-        """
+        """Assigns unique node IDs to each sample"""
+
         data_copy = copy.deepcopy(data)
         train_len = len(data.train.x)
         nodeid = "nodeid"
@@ -336,20 +281,18 @@ class IndoorLocGraphData:
         data: pd.DataFrame, 
         tensor_dim: int
     ) -> torch.Tensor:
-        """
-        Crea les màscares per un subconjunt.
-        """
+        """Creates a boolean mask tensor from node IDs."""
+
         mask = torch.zeros(tensor_dim, dtype=torch.bool)
         mask[data["nodeid"].values] = True
 
         return mask
 
-    def _build_knn_graph(self, gdata, k, metric='euclidean'):
-        """
-        Construeix el graf k-veïns pròxims.
-        """
+    def _build_knn_graph(self, graph_data, k, metric='euclidean'):
+        """Constructs a K-Nearest Neighbors graph."""
+
         if k is not None and k > 0:
-            X = gdata.x.cpu().numpy()
+            X = graph_data.x.cpu().numpy()
             
             knn_graph = kneighbors_graph(
                 X, 
@@ -366,57 +309,53 @@ class IndoorLocGraphData:
             
             edge_index = to_undirected(edge_index)
 
-            gdata.edge_index = edge_index.to(self.device)
-            gdata.k = k
+            graph_data.edge_index = edge_index.to(self.device)
+            graph_data.k = k
     
-        return gdata
+        return graph_data
     
     def create_nodes(
         self, 
-        gdata,
+        graph_data,
         dataset: IndoorLocDataset, 
         val_size: float = 0.1,
         n_split: int = 0
     ) -> Data:
-        """
-        Crea el tensor de les caracteristiques o empremtes.
-        """
+        """Creates node features."""
+
         dataset = self._assign_nodeid(dataset)
         
         X_train, X_val, _, _ = train_test_split(
             dataset.train.x, dataset.train.y, test_size=val_size, random_state=SEED + n_split
         )
 
-        gdata.num_nodes = sum(len(df) for df in [X_train, X_val, dataset.test.x])
+        graph_data.num_nodes = sum(len(df) for df in [X_train, X_val, dataset.test.x])
 
-        gdata.val_mask = self._create_tensor_mask(X_val, gdata.num_nodes)
-        gdata.train_mask = self._create_tensor_mask(X_train, gdata.num_nodes)
-        gdata.test_mask = self._create_tensor_mask(dataset.test.x, gdata.num_nodes)
+        graph_data.val_mask = self._create_tensor_mask(X_val, graph_data.num_nodes)
+        graph_data.train_mask = self._create_tensor_mask(X_train, graph_data.num_nodes)
+        graph_data.test_mask = self._create_tensor_mask(dataset.test.x, graph_data.num_nodes)
 
-        gdata.val_size = val_size
+        graph_data.val_size = val_size
 
         x_concat = pd.concat([dataset.train.x, dataset.test.x])
-        gdata.x = torch.tensor(x_concat[dataset.features].values, dtype=torch.float)
+        graph_data.x = torch.tensor(x_concat[dataset.features].values, dtype=torch.float)
 
-        gdata.num_features = len(dataset.features)
+        graph_data.num_features = len(dataset.features)
         
-        return gdata.to(self.device)
+        return graph_data.to(self.device)
 
-    def create_edges(self, gdata, graph_params):
-        """
-        Crea el tensor dels enllaços generats a partir del graf k-veïns pròxims.
-        """
-
+    def create_edges(self, graph_data, graph_params):
+        """Generates graph edges based on KNN connectivity."""
+        
         k = graph_params.get('k', 15)
         metric = graph_params.get('metric', 'manhattan')
-        self._build_knn_graph(gdata, k, metric)
+        self._build_knn_graph(graph_data, k, metric)
 
-        return gdata.to(self.device) 
+        return graph_data.to(self.device) 
     
-    def create_node_labels(self, dataset, gdata, task):
-        """
-        Crea el tensor de les variables objectiu.
-        """
+    def create_node_labels(self, dataset, graph_data, task):
+        """Generates node labels for classification or regression tasks."""
+
         if task == TASKS_REG:
             train_y = dataset.train.y
 
@@ -436,31 +375,28 @@ class IndoorLocGraphData:
 
             coords_scaled = self.y_scaler.transform(all_coords)  
             
-            gdata.y = torch.tensor(coords_scaled, dtype=torch.float)
-            gdata.y_scaler = self.y_scaler
-            gdata.num_classes = 0
+            graph_data.y = torch.tensor(coords_scaled, dtype=torch.float)
+            graph_data.y_scaler = self.y_scaler
+            graph_data.num_classes = 0
 
         if task == TASKS_CLS:
             y_concat = pd.concat([dataset.train.y, dataset.test.y])
 
-            gdata.y = torch.tensor(y_concat[dataset.target].values, dtype=torch.int64)
-            gdata.num_classes = len(y_concat[dataset.target].unique())
+            graph_data.y = torch.tensor(y_concat[dataset.target].values, dtype=torch.int64)
+            graph_data.num_classes = len(y_concat[dataset.target].unique())
 
-        return gdata.to(self.device)
+        return graph_data.to(self.device)
 
-    def create_dataloader(
+    def create_data_loader(
         self, 
         dataset: IndoorLocDataset, 
         val_size: float,
         graph_params: dict,
         n_split: int = 0,
     ) -> IndoorLocGraphDataLoader:
-        """
-        Crea l'objecte Data amb l'estructura del graf 
-        per les tasques de regressió i classificació.
-        """
-    
-        gdataloader = IndoorLocGraphDataLoader()
+        """Generates graph data loaders for classification and regression tasks."""
+
+        graph_data_loader = IndoorLocGraphDataLoader()
         tasks = [TASKS_CLS, TASKS_REG]
 
         graph_data = Data()
@@ -470,21 +406,21 @@ class IndoorLocGraphData:
         for task in tasks:
             if task == TASKS_CLS:
                 dataset.target = TARGETS_BUILDING_FLOOR
-                gdata_cls = self.create_node_labels(
+                graph_data_cls = self.create_node_labels(
                     dataset=dataset,
-                    gdata=copy.deepcopy(graph_data),
+                    graph_data=copy.deepcopy(graph_data),
                     task=task,
                 )
-                gdataloader.cls = gdata_cls
+                graph_data_loader.cls = graph_data_cls
 
             if task == TASKS_REG:
                 dataset.target = [TARGETS_LONGITUDE, TARGETS_LATITUDE] 
-                gdata_reg = self.create_node_labels(
+                graph_data_reg = self.create_node_labels(
                     dataset=dataset, 
-                    gdata=copy.deepcopy(graph_data),
+                    graph_data=copy.deepcopy(graph_data),
                     task=task,
                 )
-                gdataloader.reg = gdata_reg
+                graph_data_loader.reg = graph_data_reg
 
-        return gdataloader
+        return graph_data_loader
     
