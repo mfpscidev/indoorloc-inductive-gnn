@@ -346,7 +346,7 @@ class IndoorLocGraphData:
 
     def create_edges(self, graph_data, graph_params):
         """Generates graph edges based on KNN connectivity."""
-        
+
         k = graph_params.get('k', 15)
         metric = graph_params.get('metric', 'manhattan')
         self._build_knn_graph(graph_data, k, metric)
@@ -387,15 +387,7 @@ class IndoorLocGraphData:
 
         return graph_data.to(self.device)
 
-    def create_data_loader(
-        self, 
-        dataset: IndoorLocDataset, 
-        val_size: float,
-        graph_params: dict,
-        n_split: int = 0,
-    ) -> IndoorLocGraphDataLoader:
-        """Generates graph data loaders for classification and regression tasks."""
-
+    def create_transductive_graph(self, dataset, val_size, graph_params, n_split):
         graph_data_loader = IndoorLocGraphDataLoader()
         tasks = [TASKS_CLS, TASKS_REG]
 
@@ -421,6 +413,77 @@ class IndoorLocGraphData:
                     task=task,
                 )
                 graph_data_loader.reg = graph_data_reg
+
+        return graph_data_loader
+
+    def create_inductive_graphs(self, dataset, val_size, graph_params, n_split):
+        graph_data_loader = IndoorLocGraphDataLoader()
+        tasks = [TASKS_CLS, TASKS_REG]
+
+        dataset = self._assign_nodeid(dataset)
+
+        X_train, X_val, _, _ = train_test_split(
+            dataset.train.x,
+            dataset.train.y,
+            test_size=val_size,
+            random_state=SEED + n_split
+        )
+
+        splits = {
+            "train": X_train,
+            "val": X_val,
+            "test": dataset.test.x,
+        }
+
+        def _build_split_graph(x_df):
+            gdata = Data()
+            gdata.num_nodes = len(x_df)
+            gdata.x = torch.tensor(x_df.values, dtype=torch.float)
+            gdata.num_features = len(dataset.features)
+            return self.create_edges(gdata, graph_params)
+
+        graphs = {name: _build_split_graph(x) for name, x in splits.items()}
+
+        for task in tasks:
+            if task == TASKS_CLS:
+                dataset.target = TARGETS_BUILDING_FLOOR
+                graph_data_loader.cls = {
+                    split: self.create_node_labels(
+                        dataset=dataset,
+                        graph_data=copy.deepcopy(gdata),
+                        task=task,
+                    )
+                    for split, gdata in graphs.items()
+                }
+
+            if task == TASKS_REG:
+                dataset.target = [TARGETS_LONGITUDE, TARGETS_LATITUDE]
+                graph_data_loader.reg = {
+                    split: self.create_node_labels(
+                        dataset=dataset,
+                        graph_data=copy.deepcopy(gdata),
+                        task=task,
+                    )
+                    for split, gdata in graphs.items()
+                }
+
+        return graph_data_loader
+
+    def create_data_loader(
+        self, 
+        dataset: IndoorLocDataset, 
+        val_size: float,
+        graph_params: dict,
+        n_split: int = 0,
+    ) -> IndoorLocGraphDataLoader:
+        """Generates graph data loaders for classification and regression tasks."""
+
+        if graph_params["scheme"] == 'transductive':
+            graph_data_loader = self.create_transductive_graph(dataset, val_size, graph_params, n_split)
+        elif graph_params["scheme"] == 'inductive':
+            graph_data_loader = self.create_inductive_graphs(dataset, val_size, graph_params, n_split)
+        else:
+            raise ValueError("Graph scheme must be transductive or inductive!")
 
         return graph_data_loader
     
