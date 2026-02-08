@@ -422,7 +422,7 @@ class IndoorLocGraphData:
 
         dataset = self._assign_nodeid(dataset)
 
-        X_train, X_val, _, _ = train_test_split(
+        X_train, X_val, y_train, y_val = train_test_split(
             dataset.train.x,
             dataset.train.y,
             test_size=val_size,
@@ -430,9 +430,9 @@ class IndoorLocGraphData:
         )
 
         splits = {
-            "train": X_train,
-            "val": X_val,
-            "test": dataset.test.x,
+            "train": (X_train, y_train),
+            "val": (X_val, y_val),
+            "test": (dataset.test.x, dataset.test.y),
         }
 
         def _build_split_graph(x_df):
@@ -442,29 +442,56 @@ class IndoorLocGraphData:
             gdata.num_features = len(dataset.features)
             return self.create_edges(gdata, graph_params)
 
-        graphs = {name: _build_split_graph(x) for name, x in splits.items()}
+        def _assign_split_labels(gdata, y_df, task, fit_scaler=False):
+            if task == TASKS_REG:
+                coords = np.column_stack((
+                    y_df[TARGETS_LONGITUDE].values,
+                    y_df[TARGETS_LATITUDE].values
+                ))
+
+                if fit_scaler:
+                    self.y_scaler.fit(coords)
+
+                coords = self.y_scaler.transform(coords)
+                gdata.y = torch.tensor(coords, dtype=torch.float)
+                gdata.num_classes = 0
+
+            if task == TASKS_CLS:
+                gdata.y = torch.tensor(
+                    y_df[TARGETS_BUILDING_FLOOR].values,
+                    dtype=torch.int64
+                )
+                gdata.num_classes = len(np.unique(gdata.y.numpy()))
+
+            return gdata
+        
+        graphs = {
+            split: _build_split_graph(x)
+            for split, (x, _) in splits.items()
+        }
 
         for task in tasks:
             if task == TASKS_CLS:
                 dataset.target = TARGETS_BUILDING_FLOOR
                 graph_data_loader.cls = {
-                    split: self.create_node_labels(
-                        dataset=dataset,
-                        graph_data=copy.deepcopy(gdata),
-                        task=task,
+                    split: _assign_split_labels(
+                        copy.deepcopy(graphs[split]),
+                        y,
+                        task,
                     )
-                    for split, gdata in graphs.items()
+                    for split, (_, y) in splits.items()
                 }
 
             if task == TASKS_REG:
                 dataset.target = [TARGETS_LONGITUDE, TARGETS_LATITUDE]
                 graph_data_loader.reg = {
-                    split: self.create_node_labels(
-                        dataset=dataset,
-                        graph_data=copy.deepcopy(gdata),
-                        task=task,
+                    split: _assign_split_labels(
+                        copy.deepcopy(graphs[split]),
+                        y,
+                        task,
+                        fit_scaler=(split == "train"),
                     )
-                    for split, gdata in graphs.items()
+                    for split, (_, y) in splits.items()
                 }
 
         return graph_data_loader
