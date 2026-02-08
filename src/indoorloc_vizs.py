@@ -161,8 +161,6 @@ class GraphVisualizer:
 
         return node_colors, split_colors, split_to_index
 
-
-
     def _add_edge_weights_to_nx(self, G, graphdata):
         """
         Assigna els pesos de les arestes del graf si estan disponibles
@@ -240,31 +238,41 @@ class GraphVisualizer:
 
         return pos
 
-    def draw_graph(self, graphdata, k=0.2, iterations=200, spacing=3.0, scheme="inductive",
-                    color="green", color_mode="split", mode="grid", ax=None, title=None, out_path=None):
+    def draw_graph(
+            self, 
+            graphdata, 
+            k=0.2, 
+            iterations=200, 
+            spacing=3.0, 
+            scheme="inductive",
+            cluster="split", 
+            mode=None, 
+            ax=None, 
+            title=None, 
+            out_path=None
+    ):
         """
         Dibuixa el graf G amb Networkx.
         """
-        if scheme == "transductive": 
-            if color_mode == "class":
-                node_colors, colors, class_to_index = self._assign_node_colors_by_class(graphdata)
-            elif color_mode == "split":
-                node_colors, colors, class_to_index = self._assign_node_colors_by_split(graphdata)
+        if cluster == "class":
+            node_colors, colors, class_to_index = self._assign_node_colors_by_class(graphdata)
+        elif cluster == "split":
+            node_colors, colors, class_to_index = self._assign_node_colors_by_split(graphdata)
             
-
         if ax is None:
             fig, ax = plt.subplots(figsize=(5, 5))
 
         G = to_networkx(graphdata, to_undirected=True)
         G = self._add_edge_weights_to_nx(G, graphdata)
-        #pos = self.compact_cluster_layout_from_pyg(graphdata, k, iterations, spacing, mode)
-        pos = nx.spring_layout(G)    
+        if mode != None:
+            pos = self.compact_cluster_layout_from_pyg(graphdata, k, iterations, spacing, mode)
+        pos = nx.spring_layout(G, seed=SEED)    
 
         nx.draw(
             G, pos, ax=ax,
             with_labels=False,
             node_size=40,
-            node_color=node_colors if scheme == "transductive" else color,
+            node_color=node_colors,
             width=0.05,
             edgecolors='black',
             edge_color="#474545BA",       
@@ -272,23 +280,24 @@ class GraphVisualizer:
             alpha=0.8
         )
 
-        if scheme == "transductive": 
-            patches = []
-            for split, idx in class_to_index.items():
-                color = colors[split]  
-                patch = mpatches.Patch(color=color, label=f"{split}")
-                patches.append(patch)
+        patches = []
+        for split, idx in class_to_index.items():
+            color = colors[split]  
+            patch = mpatches.Patch(color=color, label=f"{split}")
+            patches.append(patch)
 
-            ax.legend(
-                handles=patches,
-                title="Floor" if color_mode=="class" else "Split",
-                title_fontsize=12,
-                loc="upper right",
-                fontsize=12,
-                bbox_to_anchor=(1.1, 0.85)
-            )
+        ax.legend(
+            handles=patches,
+            title="Floor" if cluster=="class" else "Data split",
+            title_fontsize=12,
+            loc="upper right",
+            fontsize=10,
+            bbox_to_anchor=(1.2, 0.85)
+        )
         plt.title(title, fontsize=16)
-        #plt.savefig(out_path, format="pdf", bbox_inches="tight")
+
+        if out_path != None:
+            plt.savefig(out_path, format="pdf", bbox_inches="tight")
 
 
 class TableVisualizer:
