@@ -84,8 +84,9 @@ class GNNRegressionTrainer:
     Gestiona l'optimització, entrenament i predicció dels models GNN
     per la tasca de regressió.
     """
-    def __init__(self, dataset, max_epochs=800, patience=200):
+    def __init__(self, dataset, scheme, max_epochs=800, patience=200):
         self.dataset = dataset
+        self.scheme = scheme
         self.study_name = None
         self.direction = None
         self.storage = None
@@ -150,7 +151,7 @@ class GNNRegressionTrainer:
                 data.y_scaler.inverse_transform(data.y[mask].cpu().numpy())
             )
         else:
-            outputs = model(data['val'])
+            outputs = model(data['val']).to(self.device)
             outputs_rescaled = torch.tensor(
                 data['val'].y_scaler.inverse_transform(outputs.cpu().numpy())
             )
