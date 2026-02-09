@@ -436,6 +436,8 @@ class IndoorLocGraphData:
         }
 
         def _build_split_graph(x_df):
+            x_df = x_df[dataset.features]
+
             gdata = Data()
             gdata.num_nodes = len(x_df)
             gdata.x = torch.tensor(x_df.values, dtype=torch.float)
@@ -454,6 +456,7 @@ class IndoorLocGraphData:
 
                 coords = self.y_scaler.transform(coords)
                 gdata.y = torch.tensor(coords, dtype=torch.float)
+                gdata.y_scaler = self.y_scaler
                 gdata.num_classes = 0
 
             if task == TASKS_CLS:
@@ -493,6 +496,12 @@ class IndoorLocGraphData:
                     )
                     for split, (_, y) in splits.items()
                 }
+        graph_data_loader.reg["train"].to(self.device)
+        graph_data_loader.reg["val"].to(self.device)
+        graph_data_loader.reg["test"].to(self.device)
+        graph_data_loader.cls["train"].to(self.device)
+        graph_data_loader.cls["val"].to(self.device)
+        graph_data_loader.cls["test"].to(self.device)
 
         return graph_data_loader
 
