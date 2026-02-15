@@ -7,7 +7,7 @@ import torch.nn as nn
 import torch_geometric
 import optuna
 
-import indoorloc_vizs as ilvizs
+import indoorloc_viz as ilviz
 import indoorloc_enums as ilenums
 
 # Numerical constants
@@ -196,13 +196,13 @@ class GNNRegressionTrainer:
                     print_early_stopping(epoch)                
         
                 if show_train_process: 
-                    trainingvizs = ilvizs.TrainingVisualizer()
+                    trainingvizs = ilviz.TrainingVisualizer()
                     trainingvizs.plot_metrics(metrics[SUBSETS_TRAIN], metrics[SUBSETS_VAL])
         
                 return validation_loss.item()
 
         if show_train_process:
-                    trainingvizs = ilvizs.TrainingVisualizer()
+                    trainingvizs = ilviz.TrainingVisualizer()
                     trainingvizs.plot_metrics(metrics[SUBSETS_TRAIN], metrics[SUBSETS_VAL])
 
         return validation_loss.item()
