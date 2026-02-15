@@ -84,15 +84,11 @@ class GNNRegressionTrainer:
     Gestiona l'optimització, entrenament i predicció dels models GNN
     per la tasca de regressió.
     """
-    def __init__(self, dataset, scheme, max_epochs=800, patience=200):
-        self.dataset = dataset
-        self.scheme = scheme
+    def __init__(self):
         self.study_name = None
         self.direction = None
         self.storage = None
         self.load_if_exists = None
-        self.max_epochs = max_epochs
-        self.patience = patience
         self.n_trials = None
         self.device = torch.device(
             DEVICES_CUDA if torch.cuda.is_available() else DEVICES_CPU
@@ -210,22 +206,32 @@ class GNNRegressionTrainer:
         
                 if show_train_process: 
                     trainingvizs = ilvizs.TrainingVisualizer()
-                    trainingvizs.plot_metrics(self.dataset, metrics[SUBSETS_TRAIN], metrics[SUBSETS_VAL])
+                    trainingvizs.plot_metrics(metrics[SUBSETS_TRAIN], metrics[SUBSETS_VAL])
         
                 return validation_loss.item()
 
         if show_train_process:
                     trainingvizs = ilvizs.TrainingVisualizer()
-                    trainingvizs.plot_metrics(self.dataset, metrics[SUBSETS_TRAIN], metrics[SUBSETS_VAL])
+                    trainingvizs.plot_metrics(metrics[SUBSETS_TRAIN], metrics[SUBSETS_VAL])
 
         return validation_loss.item()
 
     @torch.no_grad()
-    def _test(
+    def test(
         self, 
         data: torch_geometric.data.Data, 
-        model: torch.nn.Module
+        model: torch.nn.Module,
+        pretrained_model: str
     ) -> dict:
+        
+        torch.cuda.synchronize()
+        start = time.perf_counter()
+        
+        model.to(self.device)
+
+        if pretrained_model is not None:
+            model.load_state_dict(torch.load(pretrained_model))
+
         mae_loss = nn.L1Loss()
         model.eval()
         
@@ -246,6 +252,10 @@ class GNNRegressionTrainer:
             targets_rescaled = torch.tensor(
                 data['test'].y_scaler.inverse_transform(data['test'].y.cpu().numpy())
             )
+
+        torch.cuda.synchronize()
+        end = time.perf_counter()
+        elapsed_time = end - start  
         
         positioning_error = torch.sqrt(
             torch.sum((outputs_rescaled - targets_rescaled)**2, dim=1)
@@ -258,138 +268,14 @@ class GNNRegressionTrainer:
         mae = mae_loss(outputs_rescaled, targets_rescaled)
         mae_x = mae_loss(outputs_x, targets_x)
         mae_y = mae_loss(outputs_y, targets_y)
-        
-        output_errors = targets_rescaled - outputs_rescaled
-        
+                
         return {
             METRICS_MPE: mean_positioning_error.item(),
             METRICS_MAE: mae.item(),
             METRICS_MAE_X: mae_x.item(),
             METRICS_MAE_Y: mae_y.item(),
-            METRICS_OUTPUT_ERRORS: output_errors
+            METRICS_ELAPSED_TIME: elapsed_time
         }
-
-    def run_tests(
-        self, 
-        data: list, 
-        model_class: type, 
-        parameters: dict, 
-        verbose: int = 0,
-        model_path: str = None,
-        log_path: str = None,
-        show_train_process: bool = False
-
-    ) -> dict:
-        mpe, mae, mae_x, mae_y, output_errors = [], [], [], [], []
-        train_time_list = [] 
-        test_time_list = [] 
-        models = []
-        mae_per_run = []
-        best_model = None
-        best_mae = float('inf')
-        
-        num_runs = len(data)
-        iterator = tqdm(range(num_runs), desc=RUN_TESTS) \
-            if verbose > 0 and tqdm else range(num_runs)
-        
-        for i in iterator:
-            start_time = time.perf_counter()
-
-            model = model_class(**parameters).to(self.device)
-            self.train_validate(
-                data[i].reg, model, self.max_epochs, self.patience, verbose,
-                  show_train_process
-            )
-            training_elapsed_time = time.perf_counter() - start_time
-            
-            start_time = time.perf_counter()
-
-            output_metrics = self._test(data[i].reg, model)
-            
-            testing_elapsed_time = time.perf_counter() - start_time
-            
-            train_time_list.append(training_elapsed_time)
-            test_time_list.append(testing_elapsed_time)
-     
-            mpe.append(output_metrics[METRICS_MPE])
-            mae.append(output_metrics[METRICS_MAE])
-            mae_x.append(output_metrics[METRICS_MAE_X])
-            mae_y.append(output_metrics[METRICS_MAE_Y])
-            output_errors.append(output_metrics[METRICS_OUTPUT_ERRORS])
-
-            models.append(model)
-            mae_per_run.append(output_metrics[METRICS_MAE])
-            
-            if output_metrics[METRICS_MAE] < best_mae:
-                best_mae = output_metrics[METRICS_MAE]
-                best_model = model
-
-            if verbose > 2:
-                tqdm.write(print_reg_test_summary(i, num_runs, 
-                                                  output_metrics, 
-                                                  training_elapsed_time,
-                                                  testing_elapsed_time))
-
-        mean_mae = np.mean(mae_per_run)
-
-        idx = np.argmin(np.abs(np.array(mae_per_run) - mean_mae))
-        representative_model = models[idx]
-
-        avg_mpe = round(np.mean(mpe).item(), 2)   
-        std_mpe = round(np.std(mpe).item(), 2)
-        avg_mae = round(np.mean(mae).item(), 2)
-        std_mae = round(np.std(mae).item(), 2)
-        avg_mae_x = round(np.mean(mae_x).item(), 2)
-        std_mae_x = round(np.std(mae_x).item(), 2)
-        avg_mae_y = round(np.mean(mae_y).item(), 2)
-        std_mae_y = round(np.std(mae_y).item(), 2)
-
-        mean_train_time = round(np.mean(train_time_list).item(), 2)
-        std_train_time = round(np.std(train_time_list).item(), 2)
-        mean_test_time = round(np.mean(test_time_list).item(), 5)
-        std_test_time = round(np.std(test_time_list).item(), 5)
-        
-        avg_output_errors = np.mean(output_errors, axis=0)
-        
-        if verbose > 1:
-            print_reg_summary(avg_mpe, std_mpe, 
-                              avg_mae, std_mae,
-                              avg_mae_x, std_mae_x,
-                              avg_mae_y, std_mae_y,
-                              mean_train_time, std_train_time,
-                              mean_test_time, std_test_time)
-        
-        if model_path is not None and representative_model is not None:
-            torch.save(representative_model.state_dict(), model_path)
-        
-        results =  {
-            METRICS_MPE:avg_mpe, 
-            METRICS_MPE_STD:std_mpe,
-            METRICS_MAE:avg_mae,
-            METRICS_MAE_STD:std_mae,
-            METRICS_MAE_X:avg_mae_x,
-            METRICS_MAE_X_STD:std_mae_x,
-            METRICS_MAE_Y:avg_mae_y,
-            METRICS_MAE_Y_STD:std_mae_y,
-            MEAN_TRAIN_TIME: mean_train_time,
-            MEAN_TRAIN_TIME_STD: std_train_time,
-            MEAN_TEST_TIME: mean_test_time,
-            MEAN_TEST_TIME_STD: std_test_time,
-            PARAMETERS_PARAMS: parameters,
-            METRICS_NUM_TESTS: num_runs,
-            METRICS_MAX_EPOCHS: self.max_epochs,
-            METRICS_PATIENCE: self.patience,
-            PARAMETERS_N_PARAMS: model.get_parameters(),
-            METRICS_OUTPUT_ERRORS: avg_output_errors
-        }
-
-        errors_path = log_path.replace('.csv', '_errors.npy')
-        np.save(errors_path, avg_output_errors)
-        results['errors_file'] = errors_path
-
-        save_results_to_csv(results, filename=log_path)
-
-        return results
     
     def set_gridparams(self, trial, data, model_class):
         if model_class.__name__ in ['GCNRegressor', 'SAGERegressor']:
@@ -550,6 +436,40 @@ class SAGERegressor(nn.Module):
 
     def forward(self, data: torch_geometric.data.Data) -> torch.Tensor:
         return self.layers(data.x, data.edge_index)
+
+
+
+def summarize_predictions(predictions, graph_params, model_params, 
+                          task=TASKS_REG, save_path=None):
+    
+    if task == TASKS_REG:
+        metrics = ['mpe', 'mae', 'mae_x', 'mae_y', 'elapsed_time']
+
+    if len(predictions) == 0:
+        raise ValueError("Predictions list is empty.")
+
+    summary_data = {}
+    summary_data['timestamp'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    for m in metrics:
+        if m not in predictions[0]:
+            raise KeyError(f"The metric '{m}' is not found.")
+        values = [p[m] for p in predictions]
+        summary_data[f"{m}_mean"] = round(pd.Series(values).mean(), 4)
+        summary_data[f"{m}_std"] = round(pd.Series(values).std(), 4)
+
+    summary_df = pd.DataFrame([summary_data])
+
+    summary_data['graph_params'] = str(graph_params)
+    summary_data['model_params'] = str(model_params)
+
+    if save_path is not None:
+        try:
+            with open(save_path, 'x') as f:
+                pd.DataFrame([summary_data]).to_csv(f, index=False)
+        except FileExistsError:
+           pd.DataFrame([ summary_data]).to_csv(save_path, mode='a', header=False, index=False)
+
+    return summary_df
 
 
 def print_cls_epoch_summary(epoch, train_loss, train_accuracy, 
