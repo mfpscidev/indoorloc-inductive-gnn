@@ -76,7 +76,6 @@ class TrainingVisualizer:
 
     def plot_metrics(
         self,
-        dataset,
         train: Dict[str, List[float]],
         validation: Dict[str, List[float]]
     ) -> None:
@@ -92,7 +91,6 @@ class TrainingVisualizer:
             plt.ylabel('Pèrdua')
             plt.yscale('log')  
             plt.xlabel(PlotLabels.epoch.value)
-            plt.title(dataset)
             plt.legend()
         else:
             fig, ax = plt.subplots(
@@ -105,7 +103,6 @@ class TrainingVisualizer:
                 ax[i].set_ylabel('Pèrdua')
                 ax[i].set_yscale('log')  
                 ax[i].set_xlabel(PlotLabels.epoch.value)
-                ax[i].set_title(dataset)
                 ax[i].legend()
 
         plt.tight_layout()
