@@ -76,11 +76,6 @@ class GNNRegressionTrainer:
     per la tasca de regressió.
     """
     def __init__(self):
-        self.study_name = None
-        self.direction = None
-        self.storage = None
-        self.load_if_exists = None
-        self.n_trials = None
         self.device = torch.device(
             DEVICES_CUDA if torch.cuda.is_available() else DEVICES_CPU
         )
@@ -165,6 +160,7 @@ class GNNRegressionTrainer:
 
         best_validation_loss = 0
         nonimprovement_count = 0
+        model.to(self.device)
 
         for epoch in range(1, max_epochs + 1):
             train_loss = self._train(data, model)
@@ -183,7 +179,7 @@ class GNNRegressionTrainer:
             if epoch == 1:
                 best_validation_loss = validation_loss.item()
 
-            if show_train_process and (epoch == 1 or epoch % 50 == 0):
+            if show_train_process and (epoch == 1 or epoch % 100 == 0):
                 print_reg_epoch_summary(epoch, train_loss, validation_loss)
 
             nonimprovement_count, \
@@ -268,104 +264,7 @@ class GNNRegressionTrainer:
             METRICS_ELAPSED_TIME: elapsed_time
         }
     
-    def set_gridparams(self, trial, data, model_class):
-        if model_class.__name__ in ['GCNRegressor', 'SAGERegressor']:
-
-            if hasattr(data, 'train_mask'):
-                data = data
-            else:
-                data = data['train']
-        
-            params = {
-                'input_dim': data.num_features,
-                'output_dim': data.y.shape[1],
-            }   
-            
-            hidden_dims = []
-            dropouts = []
-
-            params['n_layers'] = trial.suggest_categorical('n_layers', [2])
-            for i in range(params['n_layers']):
-                hidden_dims.append(trial.suggest_categorical(f'hidden_dim_layer_{i}', [128, 256]))
-            
-                if i < params['n_layers'] - 1:
-                    dropouts.append(trial.suggest_categorical(f'dropout_layer_{i}', [0.2, 0.4, 0.6]))
-            
-            params['hidden_dim'] = hidden_dims
-            params['dropout'] = dropouts
-            params['learning_rate'] = trial.suggest_categorical('learning_rate', [0.005, 0.01])            
-            params['weight_decay'] = trial.suggest_categorical('weight_decay', [1e-5, 1e-4])            
-            params['optim_factor'] = trial.suggest_categorical('optim_factor', [0.9])
-            params['mlp_layers'] = trial.suggest_categorical('mlp_layers', [2, 4])
     
-        elif model_class.__name__ in ['GATRegressor']:
-            params = {
-                'input_dim': data.num_features,
-                'output_dim': data.y.shape[1],
-            }   
-            
-            hidden_dims = []
-            dropouts = []
-            heads = []
-
-            params['n_layers'] = trial.suggest_categorical('n_layers', [2])
-            for i in range(params['n_layers']):
-                hidden_dims.append(trial.suggest_categorical(f'hidden_dim_layer_{i}', [128, 256]))
-                heads.append(trial.suggest_categorical(f'heads_layer_{i}', [1]))
-            
-                if i < params['n_layers'] - 1:
-                    dropouts.append(trial.suggest_categorical(f'dropout_layer_{i}', [0.2, 0.4, 0.6]))
-            
-            params['hidden_dim'] = hidden_dims
-            params['dropout'] = dropouts
-            params['heads'] = heads
-            params['learning_rate'] = trial.suggest_categorical('learning_rate', [0.005, 0.01])            
-            params['weight_decay'] = trial.suggest_categorical('weight_decay', [1e-5, 1e-4])            
-            params['optim_factor'] = trial.suggest_categorical('optim_factor', [0.9])
-            params['mlp_layers'] = trial.suggest_categorical('mlp_layers', [2, 4])
-        
-        return params
-    
-    def objective(self, trial, data, model_class):
-        params = self.set_gridparams(trial, data, model_class)
-        model = model_class(**params).to(self.device)
-
-        mae = self.train_validate(
-            data, model, self.max_epochs, self.patience, verbose=0, trial=trial
-        )
-        
-        return mae
-
-    def run_optuna_study(
-            self,
-            data: torch_geometric.data.Data, 
-            model_class: type, 
-            study_name,
-            direction,
-            storage,    
-            load_if_exists,
-            n_trials,
-            callbacks=None
-    ):
-        
-        study = optuna.create_study(
-            study_name=study_name,
-            direction=direction,
-            storage=storage,
-            load_if_exists=load_if_exists,
-            pruner=optuna.pruners.MedianPruner(n_startup_trials=5, 
-                                               n_warmup_steps=100,
-                                               n_min_trials=5),
-            sampler=optuna.samplers.TPESampler(seed=SEED)
-        )
-        optuna.logging.set_verbosity(optuna.logging.WARNING)
-        study.optimize(
-            lambda trial: self.objective(trial, data, model_class),
-            n_trials=n_trials,
-            n_jobs=1,
-            callbacks=callbacks)
-    
-
 def summarize_predictions(predictions, graph_params, model_params, 
                           task=TASKS_REG, save_path=None):
     
@@ -417,56 +316,6 @@ def print_reg_epoch_summary(epoch, train_loss, validation_loss):
           f"Train Loss: {train_loss:.4f} | "
           f"Validation Loss: {validation_loss:.4f}")
 
-def print_cls_test_summary(i, num_runs, test_accuracy,
-                           training_elapsed_time, testing_elapsed_time):
-    """
-    Imprimeix el resultat d'una prova de test en la tasca de classificació.
-    """
-    return (f"Test [{i}/{num_runs}] => "
-            f"Accuracy: {test_accuracy:.4f} "
-            f"[Training time: {training_elapsed_time:.2f}s.] | "
-            f"[Testing time: {testing_elapsed_time:.2e}s.]")
-
-def print_reg_test_summary(i, num_runs, output_metrics,
-                            training_elapsed_time, testing_elapsed_time):
-    """
-    Imprimeix el resultat d'una prova de test en la tasca de regressió.
-    """
-    return (f"Test [{i+1}/{num_runs}] => "
-            f"MAE: {output_metrics[METRICS_MAE]:.2f} | " 
-            f"MAE (x): {output_metrics[METRICS_MAE_X]:.2f} | " 
-            f"MAE (y): {output_metrics[METRICS_MAE_Y]:.2f} | " 
-            f"[Training time: {training_elapsed_time:.2f}s.] | "
-            f"[Testing time: {testing_elapsed_time:.2e}s.]")
-
-def print_cls_summary(mean_accuracy, std_accuracy, max_accuracy,
-                      mean_train_time, std_train_time,
-                      mean_test_time, std_test_time):
-    """
-    Imprimeix el resum de les proves de test realitzades en la tasca de classificació.
-    """
-    print(f"{SEPARATOR}\nTests summary \n{SEPARATOR}\n"
-          f"Mean accuracy: {mean_accuracy:.2f}"
-          f"± {std_accuracy:.2f}\n"
-          f"Max. accuracy: {max_accuracy:.2f}\n"
-          f"Training mean time (s): {mean_train_time:.2f} ± {std_train_time:.2f}\n"
-          f"Testing mean time (s): {mean_test_time:.2e} ± {std_test_time:.2e}\n")
-
-def print_reg_summary(avg_mpe, std_mpe, avg_mae, std_mae,
-                      avg_mae_x, std_mae_x, avg_mae_y, std_mae_y,
-                      mean_train_time, std_train_time,
-                      mean_test_time, std_test_time):
-    """
-    Imprimeix el resum de les proves de test realitzades en la tasca de regressió.
-    """
-    print(f"{SEPARATOR}\nTests summary \n{SEPARATOR}\n"
-          f"MPE: {avg_mpe:.2f} ± {std_mpe:.2f}\n"
-          f"MAE: {avg_mae:.2f} ± {std_mae:.2f}\n"
-          f"MAE (x): {avg_mae_x:.2f} ± {std_mae_x:.2f}\n"
-          f"MAE (y): {avg_mae_y:.2f} ± {std_mae_y:.2f}\n"
-          f"Training mean time (s): {mean_train_time:.2f} ± {std_train_time:.2f}\n"
-          f"Testing mean time (s): {mean_test_time:.2e} ± {std_test_time:.2e}\n")
-
 def print_early_stopping(epoch):
     """
     Imprimeix missatge informant de l'aturada anticipada durant l'entrenament.
@@ -488,3 +337,4 @@ def save_results_to_csv(results, filename="results.csv"):
         df_row.to_csv(filename, mode='a', header=False, index=False)
     else:
         df_row.to_csv(filename, mode='w', header=True, index=False)
+    
