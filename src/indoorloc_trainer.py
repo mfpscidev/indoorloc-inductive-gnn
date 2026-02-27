@@ -71,10 +71,6 @@ MODEL = "model"
 
 
 class GNNRegressionTrainer:
-    """
-    Gestiona l'optimització, entrenament i predicció dels models GNN
-    per la tasca de regressió.
-    """
     def __init__(self):
         self.device = torch.device(
             DEVICES_CUDA if torch.cuda.is_available() else DEVICES_CPU
@@ -169,10 +165,8 @@ class GNNRegressionTrainer:
             metrics[SUBSETS_TRAIN][METRICS_LOSS].append(train_loss.item())
             metrics[SUBSETS_VAL][METRICS_LOSS].append(validation_loss.item())
 
-            # Reportar a Optuna per al pruning
             if trial is not None:
                 trial.report(validation_loss.item(), epoch)
-                # Comprovar si s'ha de fer pruning
                 if trial.should_prune():
                     raise optuna.TrialPruned()
             
@@ -299,9 +293,6 @@ def summarize_predictions(predictions, graph_params, model_params,
 
 def print_cls_epoch_summary(epoch, train_loss, train_accuracy, 
                             validation_loss, validation_accuracy):
-    """
-    Imprimeix les mètriques obtingudes per epoch en la tasca de classificació.
-    """
     print(f"Epoch {epoch:02d} => "
           f"Train Loss: {train_loss:.4f}, "
           f"Train Acc.: {100*train_accuracy:.2f}% | "
@@ -309,23 +300,14 @@ def print_cls_epoch_summary(epoch, train_loss, train_accuracy,
           f"Validation Acc.: {100*validation_accuracy:.2f}%")
 
 def print_reg_epoch_summary(epoch, train_loss, validation_loss):
-    """
-    Imprimeix les mètriques obtingudes per epoch en la tasca de regressió.
-    """
     print(f"Epoch {epoch:02d} => "
           f"Train Loss: {train_loss:.4f} | "
           f"Validation Loss: {validation_loss:.4f}")
 
 def print_early_stopping(epoch):
-    """
-    Imprimeix missatge informant de l'aturada anticipada durant l'entrenament.
-    """
     print(f"Early stopping triggered at epoch {epoch}.")
 
 def save_results_to_csv(results, filename="results.csv"):
-    """
-    Guarda els resultats de la prova de test en un fitxer CSV.
-    """
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
     df_row = pd.DataFrame([{
