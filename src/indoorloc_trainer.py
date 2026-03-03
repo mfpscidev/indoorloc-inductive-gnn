@@ -162,6 +162,7 @@ class GNNRegressionTrainer:
             train_loss = self._train(data, model)
             validation_loss  = self._validate(data, model)
             model.scheduler.step(validation_loss)
+
             metrics[SUBSETS_TRAIN][METRICS_LOSS].append(train_loss.item())
             metrics[SUBSETS_VAL][METRICS_LOSS].append(validation_loss.item())
 
@@ -186,14 +187,14 @@ class GNNRegressionTrainer:
                     print_early_stopping(epoch)                
         
                 if show_train_process: 
-                    trainingvizs = ilviz.TrainingVisualizer()
-                    trainingvizs.plot_metrics(metrics[SUBSETS_TRAIN], metrics[SUBSETS_VAL])
+                    trainingviz = ilviz.TrainingVisualizer()
+                    trainingviz.plot_metrics(metrics[SUBSETS_TRAIN], metrics[SUBSETS_VAL])
         
                 return validation_loss.item()
 
         if show_train_process:
-                    trainingvizs = ilviz.TrainingVisualizer()
-                    trainingvizs.plot_metrics(metrics[SUBSETS_TRAIN], metrics[SUBSETS_VAL])
+                    trainingviz = ilviz.TrainingVisualizer()
+                    trainingviz.plot_metrics(metrics[SUBSETS_TRAIN], metrics[SUBSETS_VAL])
 
         return validation_loss.item()
 
@@ -213,7 +214,6 @@ class GNNRegressionTrainer:
         if pretrained_model is not None:
             model.load_state_dict(torch.load(pretrained_model))
 
-        mae_loss = nn.L1Loss()
         model.eval()
         
         if hasattr(data, 'test_mask'):
@@ -246,9 +246,9 @@ class GNNRegressionTrainer:
         outputs_x, outputs_y = outputs_rescaled[:, 0], outputs_rescaled[:, 1]
         targets_x, targets_y = targets_rescaled[:, 0], targets_rescaled[:, 1]
         
-        mae = mae_loss(outputs_rescaled, targets_rescaled)
-        mae_x = mae_loss(outputs_x, targets_x)
-        mae_y = mae_loss(outputs_y, targets_y)
+        mae = model.criterion(outputs_rescaled, targets_rescaled)
+        mae_x = model.criterion(outputs_x, targets_x)
+        mae_y = model.criterion(outputs_y, targets_y)
                 
         return {
             METRICS_MPE: mean_positioning_error.item(),
@@ -258,12 +258,184 @@ class GNNRegressionTrainer:
             METRICS_ELAPSED_TIME: elapsed_time
         }
     
+
+class GNNClassificationTrainer:
+    def __init__(self):
+        self.device = torch.device(
+            DEVICES_CUDA if torch.cuda.is_available() else DEVICES_CPU
+        )
+
+    def _update_nonimprovement_count(
+        self, 
+        count: int, 
+        best_loss: float, 
+        current_loss: float
+    ) -> tuple[int, float]:
+        if current_loss < best_loss:
+            best_loss = current_loss
+            count = 0
+            return count, best_loss
+        else:
+            count += 1
+            return count, best_loss
     
+    def _train(
+        self, 
+        data: torch_geometric.data.Data, 
+        model: torch.nn.Module
+    ) -> tuple[torch.Tensor, float]:
+        model.train()
+        model.optimizer.zero_grad()
+        
+        if hasattr(data, 'train_mask'):
+            outputs = model(data)
+            mask = data.train_mask
+            loss = model.criterion(outputs[mask], data.y[mask])
+            prediction = outputs[mask].argmax(1)
+            accuracy = prediction.eq(data.y[mask]).sum().item() / mask.sum().item()
+        else:
+            outputs = model(data['train'])
+            loss = model.criterion(outputs, data['train'].y)
+            prediction = outputs.argmax(1)
+            accuracy = prediction.eq(data['train'].y).sum().item() / data['train'].y.size(0)
+        
+        loss.backward()
+        model.optimizer.step()
+        
+        return loss, accuracy
+
+    @torch.no_grad()
+    def _validate(
+        self, 
+        data: torch_geometric.data.Data, 
+        model: torch.nn.Module
+    ) -> tuple[float, float]:
+        model.eval()
+        
+        if hasattr(data, 'val_mask'):
+            outputs = model(data)
+            mask = data.val_mask
+            loss = model.criterion(outputs[mask], data.y[mask])
+            prediction = outputs[mask].argmax(1)
+            accuracy = prediction.eq(data.y[mask]).sum().item() / mask.sum().item()
+        else:
+            outputs = model(data['val'])
+            loss = model.criterion(outputs, data['val'].y)
+            prediction = outputs.argmax(1)
+            accuracy = prediction.eq(data['val'].y).sum().item() / data['val'].y.size(0)
+        
+        return loss, accuracy
+
+    def train_validate(
+        self, 
+        data: torch_geometric.data.Data, 
+        model: torch.nn.Module, 
+        max_epochs: int, 
+        patience: int, 
+        verbose: int,
+        show_train_process: bool = False,
+        trial = None
+    ) -> None:
+        metrics = {SUBSETS_TRAIN: {METRICS_LOSS: [], METRICS_ACCU: []},
+                   SUBSETS_VAL: {METRICS_LOSS: [], METRICS_ACCU: []}}
+        model.to(self.device)
+
+        best_validation_loss = INF
+        nonimprovement_count = 0
+        model.to(self.device)
+
+        for epoch in range(1, max_epochs + 1):
+            train_loss, train_accuracy = self._train(data, model)
+            validation_loss, validation_accuracy = self._validate(data, model)
+            model.scheduler.step(validation_loss)
+
+            metrics[SUBSETS_TRAIN][METRICS_LOSS].append(train_loss.item())
+            metrics[SUBSETS_TRAIN][METRICS_ACCU].append(train_accuracy)
+            metrics[SUBSETS_VAL][METRICS_LOSS].append(validation_loss.item())
+            metrics[SUBSETS_VAL][METRICS_ACCU].append(validation_accuracy)
+
+            if trial is not None:
+                trial.report(validation_loss.item(), epoch)
+                if trial.should_prune():
+                    raise optuna.TrialPruned()
+                
+            if epoch == 1:
+                best_validation_loss = validation_loss.item()
+
+            if show_train_process and (epoch == 1 or epoch % 50 == 0):
+                print_cls_epoch_summary(epoch, train_loss, train_accuracy, 
+                                        validation_loss, validation_accuracy)
+
+            nonimprovement_count, \
+                best_validation_loss = self._update_nonimprovement_count(
+                    nonimprovement_count, best_validation_loss, validation_loss.item()
+            )
+
+            if nonimprovement_count > patience:
+                if verbose > 3:
+                    print_early_stopping(epoch)    
+
+                if show_train_process:
+                    trainingviz = ilviz.TrainingVisualizer()
+                    trainingviz.plot_metrics(metrics[SUBSETS_TRAIN], metrics[SUBSETS_VAL])
+
+                return validation_loss.item()
+
+        if show_train_process:
+                    trainingviz = ilviz.TrainingVisualizer()
+                    trainingviz.plot_metrics(metrics[SUBSETS_TRAIN], metrics[SUBSETS_VAL])
+
+        return validation_loss.item()
+
+    @torch.no_grad()
+    def test(
+        self, 
+        data: torch_geometric.data.Data, 
+        model: torch.nn.Module,
+        pretrained_model: str
+    ) -> dict:
+        
+        torch.cuda.synchronize()
+        start = time.perf_counter()
+        
+        model.to(self.device)
+
+        if pretrained_model is not None:
+            model.load_state_dict(torch.load(pretrained_model))
+
+        model.eval()
+        
+        if hasattr(data, 'test_mask'):
+            outputs = model(data)
+            mask = data.test_mask
+            predictions = outputs[mask].argmax(dim=1)
+            targets = data.y[mask]
+            accuracy = predictions.eq(targets).sum().item() / mask.sum().item()
+        else:
+            outputs = model(data['test'])
+            predictions = outputs.argmax(dim=1)
+            targets = data['test'].y
+            accuracy = predictions.eq(targets).sum().item() / targets.size(0)
+        
+        torch.cuda.synchronize()
+        end = time.perf_counter()
+        elapsed_time = end - start  
+
+        return {
+            'accuracy': accuracy,
+            'predictions': predictions.cpu().numpy(),
+            'targets': targets.cpu().numpy(),
+            METRICS_ELAPSED_TIME: elapsed_time
+        }
+        
+
 def summarize_predictions(predictions, graph_params, model_params, 
                           task=TASKS_REG, save_path=None):
     
     if task == TASKS_REG:
         metrics = ['mpe', 'mae', 'mae_x', 'mae_y', 'elapsed_time']
+    else:
+        metrics = ['accuracy', 'elapsed_time']
 
     if len(predictions) == 0:
         raise ValueError("Predictions list is empty.")
@@ -290,6 +462,13 @@ def summarize_predictions(predictions, graph_params, model_params,
            pd.DataFrame([ summary_data]).to_csv(save_path, mode='a', header=False, index=False)
 
     return summary_df
+
+
+def get_num_features(data, scheme):
+    return (data.cls['train'] if scheme == 'inductive' else data.cls).num_features
+
+def get_num_classes(data, scheme):
+    return (data.cls['train'] if scheme == 'inductive' else data.cls).num_classes
 
 def print_cls_epoch_summary(epoch, train_loss, train_accuracy, 
                             validation_loss, validation_accuracy):
