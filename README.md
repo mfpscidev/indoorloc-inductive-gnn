@@ -1,5 +1,27 @@
 # Inductive learning scheme for WiFi fingerprinting-based indoor positioning systems
 
+### Transductive learning scheme
+
+<table>
+  <tr>
+    <td align="center">
+      <img src="images/transductive_class_tut5.png" width="400">
+    </td>
+    <td align="center">
+      <img src="images/transductive_split_tut5.png" width="400">
+    </td>
+  </tr>
+</table>
+
+### Inductive learning scheme
+
+<table>
+  <tr>
+    <td colspan="2" align="center">
+      <img src="images/inductive_tut5.png" width="1000">
+    </td>
+  </tr>
+</table>
 
 ## Repository structure
 
