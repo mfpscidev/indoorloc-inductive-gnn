@@ -211,3 +211,57 @@ class SAGERegressor(nn.Module):
 
     def forward(self, data: torch_geometric.data.Data) -> torch.Tensor:
         return self.layers(data.x, data.edge_index)
+    
+
+class SAGEClassifier(nn.Module):
+    """
+    GraphSAGE model for classification tasks.
+    """
+    def __init__(
+        self, 
+        input_dim: int, 
+        n_layers: int,
+        hidden_dim: list, 
+        output_dim: int,
+        dropout: list, 
+        learning_rate: float,
+        optim_factor: float,
+        weight_decay: float,
+        mlp_layers: int
+    ) -> None:
+        super().__init__()
+        
+        layers = []
+
+        current_dim = input_dim
+        for i in range(n_layers):
+            layers.append((SAGEConv(current_dim, hidden_dim[i]),
+                            "x, edge_index -> x"))
+            
+            layers.append(GraphNorm(hidden_dim[i]))  
+            layers.append(nn.LeakyReLU())
+
+            if i < n_layers - 1:  
+                layers.append(nn.Dropout(p=dropout[i]))
+            current_dim = hidden_dim[i]
+        
+        mlp_layers_dims = [current_dim] + [current_dim // (2 ** (i + 1)) \
+                                        for i in range(mlp_layers)] + [output_dim]
+
+        layers.append(MLP(mlp_layers_dims))
+
+        self.layers = Sequential("x, edge_index", layers) 
+
+        self.criterion = nn.CrossEntropyLoss()
+        self.optimizer = optimizer.Adam(
+            params=self.parameters(), lr=learning_rate, weight_decay=weight_decay
+        )
+        self.scheduler = optimizer.lr_scheduler.ReduceLROnPlateau(
+            self.optimizer, mode="min", factor=optim_factor, patience=10
+        )
+
+    def get_parameters(self) -> int:
+        return sum(p.numel() for p in self.parameters() if p.requires_grad)
+
+    def forward(self, data: torch_geometric.data.Data) -> torch.Tensor:
+        return self.layers(data.x, data.edge_index)
