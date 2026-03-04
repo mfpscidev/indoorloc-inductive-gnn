@@ -42,18 +42,7 @@ Results obtained after 10 runs using a random split of the training dataset each
 
 ### Regression (Prediction of coordinates)
 
-<style>
-table {
-    border-collapse: collapse;
-}
-
-th, td {
-    border: 1px solid black;
-    padding: 5px;
-    text-align: center; 
-}
-</style>
-<table>
+<table border="1" style="border-collapse: collapse; text-align:center;">
     <thead>
         <tr>
             <th colspan="4" style="text-align:center;">Mean Position Error (m)</td>
