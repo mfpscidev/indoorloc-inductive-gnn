@@ -14,27 +14,73 @@ The framework supports preprocessing of the original datasets using linear and p
 <table>
   <tr>
     <td align="center">
-      <img src="images/transductive_class_tut5.png" width="300">
+      <img src="images/transductive_class_tut5.png" width="400">
     </td>
     <td align="center">
-      <img src="images/transductive_split_tut5.png" width="300">
+      <img src="images/transductive_split_tut5.png" width="400">
     </td>
   </tr>
 </table>
 
-**TUT5 Dataset*
+**The graphs were generated from the TUT5 dataset.*
 
 ### Inductive learning scheme
 
 <table>
   <tr>
     <td colspan="2" align="center">
-      <img src="images/inductive_tut5.png" width="620">
+      <img src="images/inductive_tut5.png" width="800">
     </td>
   </tr>
 </table>
 
-**TUT5 Dataset*
+**The graphs were generated from the TUT5 dataset.*
+
+## Summary of results
+
+Results obtained after 10 runs using a random split of the training dataset each time (80/20).
+
+### Regression (Prediction of coordinates)
+
+<style>
+table {
+    border-collapse: collapse;
+}
+
+th, td {
+    border: 1px solid black;
+    padding: 5px;
+    text-align: center; 
+}
+</style>
+<table>
+    <thead>
+        <tr>
+            <th colspan="4" style="text-align:center;">Mean Position Error (m)</td>
+        </tr>
+        <tr>
+            <th>Dataset</th>
+            <th>Best k-NN <br> (Optimized)</th>
+            <th>GraphSAGE <br>(Transductive)</th>
+            <th>GraphSAGE <br> (Inductive)</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr><td>UJI1</td><td>7.33</td><td>7.36 ± 0.12</td><td>8.72 ± 0.20</td></tr>
+        <tr><td>UTS1</td><td>6.50</td><td>7.10 ± 0.12</td><td>7.39 ± 0.23</td></tr>
+        <tr><td>SAH1</td><td>5.93</td><td>5.85 ± 0.56</td><td>5.79 ± 0.97</td></tr>
+        <tr><td>TIE1</td><td>2.36</td><td>3.14 ± 0.85</td><td>3.34 ± 0.63</td></tr>
+        <tr><td>TUT1</td><td>4.43</td><td>6.46 ± 0.19</td><td>6.80 ± 0.21</td></tr>
+        <tr><td>TUT2</td><td>8.37</td><td>9.46 ± 0.62</td><td>9.46 ± 0.39</td></tr>
+        <tr><td>TUT3</td><td>7.76</td><td>7.65 ± 0.13</td><td>7.71 ± 0.25</td></tr>
+        <tr><td>TUT4</td><td>5.20</td><td>5.38 ± 0.09</td><td>5.71 ± 0.09</td></tr>
+        <tr><td>TUT5</td><td>5.22</td><td>6.19 ± 0.22</td><td>6.43 ± 0.26</td></tr>
+        <tr><td>SOD1</td><td>2.43</td><td>2.56 ± 0.10</td><td>2.59 ± 0.07</td></tr>
+        <tr><td>SOD2</td><td>1.54</td><td>1.62 ± 0.08</td><td>1.60 ± 0.11</td></tr>
+        <tr><td>SOD6</td><td>3.47</td><td>3.52 ± 0.11</td><td>3.32 ± 0.13</td></tr>
+    </tbody>
+</table>
+
 
 ## Repository structure
 
