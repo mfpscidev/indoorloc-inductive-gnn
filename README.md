@@ -1,4 +1,4 @@
-# Transductive and inductive learning scheme for WiFi fingerprinting-based indoor positioning systems
+# Transductive and inductive learning schemes for WiFi fingerprinting-based indoor positioning systems
 
 Traditionally, indoor positioning systems based on WiFi fingerprinting have relied on k-NN algorithms and, more recently, on deep learning models.
 
