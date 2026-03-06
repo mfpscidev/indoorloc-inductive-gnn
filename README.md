@@ -1,10 +1,10 @@
 # GraphILoc
 
-## Transductive and inductive learning schemes for WiFi fingerprinting-based indoor positioning systems
-
 Traditionally, indoor positioning systems based on WiFi fingerprinting have relied on k-NN algorithms and, more recently, on deep learning models.
 
 This repository contains the code for a framework developed to use **Graph Neural Networks (GNNs)** with both inductive and transductive learning schemes.
+
+## Transductive and inductive learning schemes for WiFi fingerprinting-based indoor positioning systems
 
 In the **transductive scheme**, a single graph is created that includes all dataset splits (train, validation, and test), whereas in the **inductive scheme**, separate graphs are constructed for each split to prevent phenomena such as *data leakage* and to enable evaluation on unseen graphs without retraining the model each time.
 
@@ -42,7 +42,7 @@ The framework supports preprocessing of the original datasets using linear and p
 
 Results obtained after 10 runs using a random split of the training dataset each time (80/20).
 
-### Regression (Prediction of coordinates)
+### Regression (Coordinate prediction)
 
 <table border="1" style="border-collapse: collapse; text-align:center;">
     <thead>
@@ -69,6 +69,33 @@ Results obtained after 10 runs using a random split of the training dataset each
         <tr><td><a href="https://link.springer.com/article/10.1186/s43020-022-00086-y" target="_blank">SOD1</td><td>2.43</td><td>2.56 ± 0.10</td><td>2.59 ± 0.07</td></tr>
         <tr><td><a href="https://link.springer.com/article/10.1186/s43020-022-00086-y" target="_blank">SOD2</td><td>1.54</td><td>1.62 ± 0.08</td><td>1.60 ± 0.11</td></tr>
         <tr><td><a href="https://link.springer.com/article/10.1186/s43020-022-00086-y" target="_blank">SOD6</td><td>3.47</td><td>3.52 ± 0.11</td><td>3.32 ± 0.13</td></tr>
+    </tbody>
+</table>
+
+### Classification (Building floor prediction)
+
+<table border="1" style="border-collapse: collapse; text-align:center;">
+    <thead>
+        <tr>
+            <th colspan="4" style="text-align:center;">Accuracy (%)</td>
+        </tr>
+        <tr>
+            <th>Dataset</th>
+            <th>GraphSAGE<br>(Transductive)</th>
+            <th>GraphSAGE<br>(Inductive)</th>
+        </tr>
+    </thead>
+    <tbody >
+        <tr><td><a href="https://ieeexplore.ieee.org/document/7275492" target="_blank">UJI1</td><td>95.28 ± 0.80</td><td>94.96 ± 0.39</td></tr>
+        <tr><td><a href="https://ieeexplore.ieee.org/document/8792196" target="_blank">UTS1</td><td>95.90 ± 0.35</td><td>95.59 ± 0.52</td></tr>
+        <tr><td><a href="https://zenodo.org/records/5174851" target="_blank">SAH1</td><td>88.40 ± 6.92</td><td>81.60 ± 4.54</td></tr>
+        <tr><td><a href="https://zenodo.org/records/5174851" target="_blank">TIE1</td><td>6.60 ± 18.48</td><td>2.40 ± 3.75</td></tr>
+        <tr><td><a href="https://ieeexplore.ieee.org/document/6577256" target="_blank">TUT1</td><td>91.41 ± 0.82</td><td>90.43 ± 0.41</td></tr>
+        <tr><td><a href="https://ieeexplore.ieee.org/document/6577256" target="_blank">TUT2</td><td>92.78 ± 0.92</td><td>92.78 ± 2.23</td></tr>
+        <tr><td><a href="https://www.mdpi.com/2306-5729/2/4/32" target="_blank">TUT3</td><td>93.76 ± 0.34</td><td>95.07 ± 0.24</td></tr>
+        <tr><td><a href="https://www.mdpi.com/2306-5729/2/4/32" target="_blank">TUT4</td><td>95.55 ± 0.42</td><td>95.34 ± 0.50</td></tr>
+        <tr><td><a href="https://zenodo.org/records/1161525" target="_blank">TUT5</td><td>98.70 ± 0.55</td><td>98.66 ± 0.80</td></tr>
+        <tr><td><a href="https://link.springer.com/article/10.1186/s43020-022-00086-y" target="_blank">SOD1</td><td>100.00 ± 0.00</td><td>100.00 ± 0.00</td></tr>
     </tbody>
 </table>
 
